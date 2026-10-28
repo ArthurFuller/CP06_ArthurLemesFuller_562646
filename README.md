@@ -22,3 +22,5 @@ Minigame 3D competitivo para dois jogadores, feito em Unity 6000.3.8f1 e Photon 
 No Editor, clique em **Testar 2 no Editor** e confira o movimento dos dois personagens, feixe, placar e revanche. Para testar duas telas separadas sem build, use duas cópias do projeto abertas em Editores distintos.
 
 Os objetos visuais, as plataformas, os espinhos e a interface estão salvos na cena ou no prefab do jogador. O jogo só instancia pela rede os jogadores e o estado da partida.
+
+Para ajustar o indicador de direção, abra `Assets/StickArena/Prefabs/Player.prefab` e mova o filho **Direction Marker**. A posição e o tamanho definidos no prefab são preservados; o script apenas espelha o eixo X quando o jogador vira.

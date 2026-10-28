@@ -19,6 +19,7 @@ public class ArenaPlayer : NetworkBehaviour
     private Renderer[] visuals;
     private Transform marker;
     private LineRenderer beam;
+    private const float FootOffset = 0.72f;
 
     public override void Spawned()
     {
@@ -51,7 +52,7 @@ public class ArenaPlayer : NetworkBehaviour
         {
             var b = platform.Bounds;
             if (transform.position.x >= b.min.x - 0.3f && transform.position.x <= b.max.x + 0.3f &&
-                Mathf.Abs(transform.position.y - 1f - b.max.y) < 0.08f) grounded = true;
+                Mathf.Abs(transform.position.y - FootOffset - b.max.y) < 0.08f) grounded = true;
         }
         if (grounded && input.Buttons.WasPressed(PreviousButtons, ArenaButton.Jump))
             VerticalSpeed = jumpSpeed;
@@ -82,9 +83,9 @@ public class ArenaPlayer : NetworkBehaviour
             {
                 var b = platform.Bounds;
                 if (position.x < b.min.x - 0.3f || position.x > b.max.x + 0.3f) continue;
-                if (oldPosition.y - 1f >= b.max.y - 0.08f && position.y - 1f <= b.max.y)
+                if (oldPosition.y - FootOffset >= b.max.y - 0.08f && position.y - FootOffset <= b.max.y)
                 {
-                    position.y = b.max.y + 1f;
+                    position.y = b.max.y + FootOffset;
                     VerticalSpeed = 0f;
                 }
             }
@@ -96,7 +97,7 @@ public class ArenaPlayer : NetworkBehaviour
         var peer = Runner.GetComponent<ArenaLauncher>();
         bool visible = !Eliminated && (peer == null || !peer.HideNetworkVisuals);
         foreach (var visual in visuals) visual.enabled = visible;
-        if (marker != null) marker.localPosition = new Vector3(Facing * 0.47f, 0.75f, -0.27f);
+        if (marker != null) marker.localPosition = new Vector3(Facing * Mathf.Abs(marker.localPosition.x), marker.localPosition.y, marker.localPosition.z);
         if (beam != null)
         {
             beam.enabled = visible && !Flash.ExpiredOrNotRunning(Runner);

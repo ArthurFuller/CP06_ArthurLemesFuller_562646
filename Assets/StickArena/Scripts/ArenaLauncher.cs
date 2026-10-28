@@ -101,7 +101,7 @@ public class ArenaLauncher : MonoBehaviour, INetworkRunnerCallbacks
     {
         if (!r.IsServer) return;
         if (match == null) match = r.Spawn(matchPrefab).GetComponent<ArenaMatch>();
-        var position = players.Count == 0 ? new Vector3(-3f, 1f, 0f) : new Vector3(3f, 1f, 0f);
+        var position = ArenaMatch.SpawnPosition(players.Count == 0 ? 1 : 2);
         var avatar = r.Spawn(playerPrefab, position, Quaternion.identity, player);
         players[player] = avatar;
         r.SetPlayerObject(player, avatar);

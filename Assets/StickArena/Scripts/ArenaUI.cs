@@ -1,5 +1,6 @@
 using Fusion;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public class ArenaUI : MonoBehaviour
@@ -21,6 +22,13 @@ public class ArenaUI : MonoBehaviour
         room.text = launcher.RoomName;
         room.onValueChanged.AddListener(value => launcher.RoomName = value);
         localTest.gameObject.SetActive(Application.isEditor);
+    }
+
+    private void Start()
+    {
+        if (launcher.IsPrimary) return;
+        foreach (var root in gameObject.scene.GetRootGameObjects())
+            if (root.TryGetComponent<EventSystem>(out var eventSystem)) eventSystem.enabled = false;
     }
 
     private void Update()

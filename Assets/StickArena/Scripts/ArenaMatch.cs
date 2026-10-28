@@ -14,17 +14,17 @@ public class ArenaMatch : NetworkBehaviour
 
     public int Goal => pointsToWin;
     public int SecondsLeft => Mathf.CeilToInt(Timer.RemainingTime(Runner) ?? 0f);
+    public static Vector3 SpawnPosition(int player) => new(player == 1 ? -3.5f : 3.5f, 2.22f, 0f);
 
     public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
         ArenaPlayer red = null, blue = null;
-        foreach (var player in Runner.ActivePlayers)
+        foreach (var player in FindObjectsByType<ArenaPlayer>(FindObjectsSortMode.None))
         {
-            var obj = Runner.GetPlayerObject(player);
-            if (obj == null) continue;
-            if (player.RawEncoded == 1) red = obj.GetComponent<ArenaPlayer>();
-            else blue = obj.GetComponent<ArenaPlayer>();
+            if (player.Runner != Runner) continue;
+            if (player.Object.InputAuthority.RawEncoded == 1) red = player;
+            else blue = player;
         }
         if (red == null || blue == null) { Phase = 0; return; }
 
@@ -55,8 +55,8 @@ public class ArenaMatch : NetworkBehaviour
 
     private void StartCountdown(ArenaPlayer red, ArenaPlayer blue)
     {
-        red.ResetForRound(new Vector3(-3f, 1f, 0f));
-        blue.ResetForRound(new Vector3(3f, 1f, 0f));
+        red.ResetForRound(SpawnPosition(1));
+        blue.ResetForRound(SpawnPosition(2));
         Phase = 1;
         Timer = TickTimer.CreateFromSeconds(Runner, 3f);
     }
