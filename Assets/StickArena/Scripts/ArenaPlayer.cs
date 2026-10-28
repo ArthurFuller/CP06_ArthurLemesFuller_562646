@@ -6,7 +6,7 @@ public class ArenaPlayer : NetworkBehaviour
 {
     [SerializeField] private Material redMaterial, blueMaterial;
     [SerializeField] private float speed = 7f, jumpSpeed = 9f, gravity = 23f;
-    [SerializeField] private float shotRange = 8f, shotHeight = 0.9f, pushForce = 11f;
+    [SerializeField] private float shotRange = 8f, shotHeight = 0.9f, pushForce = 11f, bulletSpeed = 18f;
     [SerializeField] private float fireInterval = 0.4f;
     [Networked] public int Facing { get; set; }
     [Networked] public bool Eliminated { get; set; }
@@ -14,11 +14,15 @@ public class ArenaPlayer : NetworkBehaviour
     [Networked] private float PushX { get; set; }
     [Networked] private NetworkButtons PreviousButtons { get; set; }
     [Networked] private TickTimer FireCooldown { get; set; }
-    [Networked] private TickTimer Flash { get; set; }
+    [Networked] private Vector3 BulletPosition { get; set; }
+    [Networked] private float BulletDistance { get; set; }
+    [Networked] private int BulletDirection { get; set; }
+    [Networked] private bool BulletActive { get; set; }
 
     private Renderer[] visuals;
     private Transform marker;
-    private LineRenderer beam;
+    private Transform bullet;
+    private Renderer bulletRenderer;
     private const float FootOffset = 0.72f;
 
     public override void Spawned()
@@ -26,12 +30,13 @@ public class ArenaPlayer : NetworkBehaviour
         if (HasStateAuthority) Facing = Object.InputAuthority.RawEncoded == 1 ? 1 : -1;
         visuals = GetComponentsInChildren<Renderer>();
         marker = transform.Find("Direction Marker");
-        beam = GetComponentInChildren<LineRenderer>();
+        bullet = transform.Find("Bullet");
+        bulletRenderer = bullet.GetComponent<Renderer>();
         foreach (var visual in visuals)
         {
             visual.shadowCastingMode = ShadowCastingMode.Off;
             visual.receiveShadows = false;
-            if (visual != beam && visual.transform != marker)
+            if (visual != bulletRenderer && visual.transform != marker)
                 visual.sharedMaterial = Object.InputAuthority.RawEncoded == 1 ? redMaterial : blueMaterial;
         }
     }
@@ -58,22 +63,33 @@ public class ArenaPlayer : NetworkBehaviour
             VerticalSpeed = jumpSpeed;
         PreviousButtons = input.Buttons;
 
-        if (input.Buttons.IsSet(ArenaButton.Fire) && FireCooldown.ExpiredOrNotRunning(Runner))
+        if (input.Buttons.IsSet(ArenaButton.Fire) && !BulletActive && FireCooldown.ExpiredOrNotRunning(Runner))
         {
             FireCooldown = TickTimer.CreateFromSeconds(Runner, fireInterval);
-            Flash = TickTimer.CreateFromSeconds(Runner, 0.13f);
-            foreach (var player in Runner.ActivePlayers)
-            {
-                if (player == Object.InputAuthority) continue;
-                var target = Runner.GetPlayerObject(player)?.GetComponent<ArenaPlayer>();
-                if (target == null || target.Eliminated) continue;
-                var delta = target.transform.position - transform.position;
-                if (delta.x * Facing > 0f && delta.x * Facing < shotRange && Mathf.Abs(delta.y) < shotHeight)
-                    target.Knockback(Facing, pushForce);
-            }
+            BulletPosition = transform.position + new Vector3(Facing * 0.55f, 0.25f, -2.5f);
+            BulletDirection = Facing;
+            BulletDistance = 0f;
+            BulletActive = true;
         }
 
         float dt = Runner.DeltaTime;
+        if (BulletActive)
+        {
+            float oldX = BulletPosition.x;
+            BulletPosition += Vector3.right * (BulletDirection * bulletSpeed * dt);
+            BulletDistance += bulletSpeed * dt;
+            var other = Object == match.RedPlayer ? match.BluePlayer : match.RedPlayer;
+            var target = other != null ? other.GetComponent<ArenaPlayer>() : null;
+            if (target != null && !target.Eliminated &&
+                target.transform.position.x >= Mathf.Min(oldX, BulletPosition.x) - 0.3f &&
+                target.transform.position.x <= Mathf.Max(oldX, BulletPosition.x) + 0.3f &&
+                Mathf.Abs(target.transform.position.y - BulletPosition.y) < shotHeight)
+            {
+                target.Knockback(BulletDirection, pushForce);
+                BulletActive = false;
+            }
+            if (BulletDistance >= shotRange) BulletActive = false;
+        }
         var oldPosition = transform.position;
         VerticalSpeed -= gravity * dt;
         var position = oldPosition + new Vector3(move * speed + PushX, VerticalSpeed, 0f) * dt;
@@ -98,12 +114,8 @@ public class ArenaPlayer : NetworkBehaviour
         bool visible = !Eliminated && (peer == null || !peer.HideNetworkVisuals);
         foreach (var visual in visuals) visual.enabled = visible;
         if (marker != null) marker.localPosition = new Vector3(Facing * Mathf.Abs(marker.localPosition.x), marker.localPosition.y, marker.localPosition.z);
-        if (beam != null)
-        {
-            beam.enabled = visible && !Flash.ExpiredOrNotRunning(Runner);
-            beam.SetPosition(0, new Vector3(Facing * 0.6f, 0.25f, 0f));
-            beam.SetPosition(1, new Vector3(Facing * shotRange, 0.25f, 0f));
-        }
+        if (bullet != null) bullet.position = BulletPosition;
+        if (bulletRenderer != null) bulletRenderer.enabled = visible && BulletActive;
     }
 
     public void Knockback(int direction, float force)
@@ -120,6 +132,7 @@ public class ArenaPlayer : NetworkBehaviour
         if (!HasStateAuthority) return;
         transform.position = position;
         VerticalSpeed = PushX = 0f;
+        BulletActive = false;
         Facing = position.x < 0f ? 1 : -1;
         Eliminated = false;
     }
