@@ -10,6 +10,8 @@ public class ArenaMatch : NetworkBehaviour
     [Networked] public int LastWinner { get; set; }
     [Networked] public bool RedReady { get; set; }
     [Networked] public bool BlueReady { get; set; }
+    [Networked] public NetworkObject RedPlayer { get; set; }
+    [Networked] public NetworkObject BluePlayer { get; set; }
     [Networked] private TickTimer Timer { get; set; }
 
     public int Goal => pointsToWin;
@@ -19,13 +21,8 @@ public class ArenaMatch : NetworkBehaviour
     public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
-        ArenaPlayer red = null, blue = null;
-        foreach (var player in FindObjectsByType<ArenaPlayer>(FindObjectsSortMode.None))
-        {
-            if (player.Runner != Runner) continue;
-            if (player.Object.InputAuthority.RawEncoded == 1) red = player;
-            else blue = player;
-        }
+        var red = RedPlayer != null ? RedPlayer.GetComponent<ArenaPlayer>() : null;
+        var blue = BluePlayer != null ? BluePlayer.GetComponent<ArenaPlayer>() : null;
         if (red == null || blue == null) { Phase = 0; return; }
 
         if (Phase == 4)
@@ -64,8 +61,8 @@ public class ArenaMatch : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority, HostMode = RpcHostMode.SourceIsHostPlayer)]
     public void RPC_Restart(RpcInfo info = default)
     {
-        if (Phase != 4 || Runner.GetPlayerObject(info.Source) == null) return;
-        if (info.Source.RawEncoded == 1) RedReady = true;
-        else BlueReady = true;
+        if (Phase != 4) return;
+        if (RedPlayer != null && info.Source == RedPlayer.InputAuthority) RedReady = true;
+        if (BluePlayer != null && info.Source == BluePlayer.InputAuthority) BlueReady = true;
     }
 }

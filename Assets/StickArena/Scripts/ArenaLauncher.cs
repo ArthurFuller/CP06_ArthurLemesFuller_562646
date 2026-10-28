@@ -30,9 +30,13 @@ public class ArenaLauncher : MonoBehaviour, INetworkRunnerCallbacks
         get
         {
             if (match != null) return match;
+            ArenaMatch fallback = null;
             foreach (var candidate in FindObjectsByType<ArenaMatch>(FindObjectsSortMode.None))
+            {
                 if (candidate.Runner == runner) return candidate;
-            return null;
+                fallback ??= candidate;
+            }
+            return fallback;
         }
     }
 
@@ -101,8 +105,11 @@ public class ArenaLauncher : MonoBehaviour, INetworkRunnerCallbacks
     {
         if (!r.IsServer) return;
         if (match == null) match = r.Spawn(matchPrefab).GetComponent<ArenaMatch>();
-        var position = ArenaMatch.SpawnPosition(players.Count == 0 ? 1 : 2);
+        bool isRed = players.Count == 0;
+        var position = ArenaMatch.SpawnPosition(isRed ? 1 : 2);
         var avatar = r.Spawn(playerPrefab, position, Quaternion.identity, player);
+        if (isRed) match.RedPlayer = avatar;
+        else match.BluePlayer = avatar;
         players[player] = avatar;
         r.SetPlayerObject(player, avatar);
     }
@@ -112,6 +119,11 @@ public class ArenaLauncher : MonoBehaviour, INetworkRunnerCallbacks
         if (!r.IsServer || !players.TryGetValue(player, out var avatar)) return;
         r.Despawn(avatar);
         players.Remove(player);
+        if (match != null)
+        {
+            if (match.RedPlayer == avatar) match.RedPlayer = null;
+            if (match.BluePlayer == avatar) match.BluePlayer = null;
+        }
     }
 
     public void OnInput(NetworkRunner r, NetworkInput input)
