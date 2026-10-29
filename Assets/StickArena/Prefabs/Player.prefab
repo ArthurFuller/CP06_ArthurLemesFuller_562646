@@ -27,8 +27,8 @@ Transform:
   m_GameObject: {fileID: 1734476822891605843}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.34, y: 0.85, z: -2.5}
-  m_LocalScale: {x: 0.25, y: 0.08, z: 0.08}
+  m_LocalPosition: {x: 0.226, y: 0.85, z: -2.5}
+  m_LocalScale: {x: 0.25, y: 0.133688, z: 0.45456806}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 6922366109562920585}
@@ -295,13 +295,14 @@ MonoBehaviour:
   redMaterial: {fileID: 2100000, guid: b2c65aa66bbd34945bf9f1bb2e4ca1bb, type: 2}
   blueMaterial: {fileID: 2100000, guid: 3e0a222a8d5c7734b91fd37387941a01, type: 2}
   speed: 7
-  jumpSpeed: 9
+  jumpSpeed: 12.1
   gravity: 23
   shotRange: 8
   shotHeight: 0.9
   pushForce: 11
   bulletSpeed: 18
   fireInterval: 0.35
+  _Team: 0
   _Facing: 0
   _Eliminated: 0
 --- !u!1 &8770300437525080095

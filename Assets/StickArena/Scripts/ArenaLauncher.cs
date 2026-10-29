@@ -15,15 +15,11 @@ public class ArenaLauncher : MonoBehaviour, INetworkRunnerCallbacks
     private NetworkRunner runner;
     private ArenaMatch match;
     private static ArenaLauncher primary;
-    private bool starting, localTestClient;
-    private bool localTestActive;
+    private bool starting;
 
     public bool IsPrimary => this == primary;
-    public bool HideNetworkVisuals => localTestClient;
-    public bool Starting => starting;
-    public bool LocalTestActive => localTestActive;
     public NetworkRunner Runner => runner;
-    public string Status { get; private set; } = "Escolha criar ou entrar";
+    public string Status { get; private set; } = "";
     public string RoomName { get => roomName; set => roomName = value; }
     public ArenaMatch Match
     {
@@ -33,7 +29,7 @@ public class ArenaLauncher : MonoBehaviour, INetworkRunnerCallbacks
             ArenaMatch fallback = null;
             foreach (var candidate in FindObjectsByType<ArenaMatch>(FindObjectsSortMode.None))
             {
-                if (candidate.Runner == runner) return candidate;
+                if (candidate.Runner == runner) return match = candidate;
                 fallback ??= candidate;
             }
             return fallback;
@@ -42,16 +38,8 @@ public class ArenaLauncher : MonoBehaviour, INetworkRunnerCallbacks
 
     private void Awake()
     {
-        if (name == "Local Test Client Runner") return;
         if (primary != null && primary != this) enabled = false;
-        else primary = this;
-    }
-
-    private void Update()
-    {
-        if (localTestClient && Match != null && Match.Phase == 4 &&
-            Keyboard.current != null && Keyboard.current.enterKey.wasPressedThisFrame)
-            VoteRestart();
+        else { primary = this; DontDestroyOnLoad(gameObject); }
     }
 
     public async Task<bool> StartSession(GameMode mode)
@@ -59,35 +47,37 @@ public class ArenaLauncher : MonoBehaviour, INetworkRunnerCallbacks
         if (starting || runner != null) return false;
         starting = true;
         Status = "Conectando...";
-        runner = gameObject.AddComponent<NetworkRunner>();
-        runner.ProvideInput = true;
-        if (localTestClient) runner.EnableVisibilityExtension();
-        var result = await runner.StartGame(new StartGameArgs
+        GameObject runnerObject = null;
+        try
         {
-            GameMode = mode,
-            SessionName = roomName.Trim(),
-            PlayerCount = 2,
-            Scene = SceneRef.FromIndex(SceneManager.GetActiveScene().buildIndex),
-            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>()
-        });
-        Status = result.Ok ? "Sala " + roomName : "Falha: " + result.ShutdownReason;
-        if (result.Ok && localTestClient) runner.SetVisible(false);
-        if (!result.Ok) { Destroy(runner); runner = null; }
-        starting = false;
-        return result.Ok;
-    }
-
-    public async void StartLocalTest()
-    {
-        localTestActive = true;
-        NetworkProjectConfig.Global.PeerMode = NetworkProjectConfig.PeerModes.Multiple;
-        if (!await StartSession(GameMode.Host)) return;
-        var peer = new GameObject("Local Test Client Runner").AddComponent<ArenaLauncher>();
-        peer.playerPrefab = playerPrefab;
-        peer.matchPrefab = matchPrefab;
-        peer.roomName = roomName;
-        peer.localTestClient = true;
-        await peer.StartSession(GameMode.Client);
+            runnerObject = new GameObject("Network Runner");
+            runner = runnerObject.AddComponent<NetworkRunner>();
+            runner.ProvideInput = true;
+            runner.AddCallbacks(this);
+            var connection = runner.StartGame(new StartGameArgs
+            {
+                GameMode = mode,
+                SessionName = roomName.Trim(),
+                PlayerCount = 2,
+                Scene = SceneRef.FromIndex(SceneManager.GetActiveScene().buildIndex),
+                SceneManager = runnerObject.AddComponent<NetworkSceneManagerDefault>()
+            });
+            if (await Task.WhenAny(connection, Task.Delay(30000)) != connection)
+                throw new TimeoutException("tempo de conexão esgotado (30 s)");
+            var result = await connection;
+            Status = result.Ok ? "" : "Não foi possível conectar";
+            if (!result.Ok) { Destroy(runnerObject); runner = null; }
+            return result.Ok;
+        }
+        catch (Exception error)
+        {
+            Status = "Não foi possível conectar";
+            Debug.LogException(error);
+            Destroy(runnerObject);
+            runner = null;
+            return false;
+        }
+        finally { starting = false; }
     }
 
     public void VoteRestart() { Match?.RPC_Restart(); }
@@ -105,9 +95,10 @@ public class ArenaLauncher : MonoBehaviour, INetworkRunnerCallbacks
     {
         if (!r.IsServer) return;
         if (match == null) match = r.Spawn(matchPrefab).GetComponent<ArenaMatch>();
-        bool isRed = players.Count == 0;
+        bool isRed = match.RedPlayer == null;
         var position = ArenaMatch.SpawnPosition(isRed ? 1 : 2);
         var avatar = r.Spawn(playerPrefab, position, Quaternion.identity, player);
+        avatar.GetComponent<ArenaPlayer>().Team = isRed ? 1 : 2;
         if (isRed) match.RedPlayer = avatar;
         else match.BluePlayer = avatar;
         players[player] = avatar;
@@ -132,20 +123,24 @@ public class ArenaLauncher : MonoBehaviour, INetworkRunnerCallbacks
         if (keys == null) return;
         var data = new ArenaInput
         {
-            Move = ((localTestClient ? keys.rightArrowKey : keys.dKey).isPressed ? 1f : 0f) -
-                   ((localTestClient ? keys.leftArrowKey : keys.aKey).isPressed ? 1f : 0f)
+            Move = (keys.dKey.isPressed ? 1f : 0f) - (keys.aKey.isPressed ? 1f : 0f)
         };
-        data.Buttons.Set(ArenaButton.Jump, localTestClient ? keys.rightShiftKey.isPressed : keys.spaceKey.isPressed);
-        data.Buttons.Set(ArenaButton.Fire, localTestClient ? keys.rightCtrlKey.isPressed : keys.jKey.isPressed);
+        data.Buttons.Set(ArenaButton.Jump, keys.spaceKey.isPressed);
+        data.Buttons.Set(ArenaButton.Fire, keys.jKey.isPressed);
         input.Set(data);
     }
 
     public void OnInputMissing(NetworkRunner r, PlayerRef player, NetworkInput input) { }
-    public void OnShutdown(NetworkRunner r, ShutdownReason reason) { Status = "Desconectado: " + reason; runner = null; }
-    public void OnConnectedToServer(NetworkRunner r) { Status = "Sala " + roomName; }
-    public void OnDisconnectedFromServer(NetworkRunner r, NetDisconnectReason reason) { Status = "Desconectado: " + reason; }
+    public void OnShutdown(NetworkRunner r, ShutdownReason reason)
+    {
+        runner = null;
+        match = null;
+        players.Clear();
+    }
+    public void OnConnectedToServer(NetworkRunner r) { }
+    public void OnDisconnectedFromServer(NetworkRunner r, NetDisconnectReason reason) { }
     public void OnConnectRequest(NetworkRunner r, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
-    public void OnConnectFailed(NetworkRunner r, NetAddress address, NetConnectFailedReason reason) { Status = "Falha: " + reason; }
+    public void OnConnectFailed(NetworkRunner r, NetAddress address, NetConnectFailedReason reason) { }
     public void OnUserSimulationMessage(NetworkRunner r, SimulationMessagePtr message) { }
     public void OnSessionListUpdated(NetworkRunner r, List<SessionInfo> sessions) { }
     public void OnCustomAuthenticationResponse(NetworkRunner r, Dictionary<string, object> data) { }

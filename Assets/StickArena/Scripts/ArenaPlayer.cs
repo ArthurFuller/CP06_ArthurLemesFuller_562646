@@ -5,9 +5,10 @@ using UnityEngine.Rendering;
 public class ArenaPlayer : NetworkBehaviour
 {
     [SerializeField] private Material redMaterial, blueMaterial;
-    [SerializeField] private float speed = 7f, jumpSpeed = 9f, gravity = 23f;
+    [SerializeField] private float speed = 7f, jumpSpeed = 12f, gravity = 23f;
     [SerializeField] private float shotRange = 8f, shotHeight = 0.9f, pushForce = 11f, bulletSpeed = 18f;
     [SerializeField] private float fireInterval = 0.4f;
+    [Networked] public int Team { get; set; }
     [Networked] public int Facing { get; set; }
     [Networked] public bool Eliminated { get; set; }
     [Networked] private float VerticalSpeed { get; set; }
@@ -23,6 +24,7 @@ public class ArenaPlayer : NetworkBehaviour
     private Transform marker;
     private Transform bullet;
     private Renderer bulletRenderer;
+    private int appliedTeam;
     private const float FootOffset = 0.72f;
 
     public override void Spawned()
@@ -36,8 +38,6 @@ public class ArenaPlayer : NetworkBehaviour
         {
             visual.shadowCastingMode = ShadowCastingMode.Off;
             visual.receiveShadows = false;
-            if (visual != bulletRenderer && visual.transform != marker)
-                visual.sharedMaterial = Object.InputAuthority.RawEncoded == 1 ? redMaterial : blueMaterial;
         }
     }
 
@@ -52,8 +52,9 @@ public class ArenaPlayer : NetworkBehaviour
         float move = Mathf.Clamp(input.Move, -1f, 1f);
         if (move != 0f) Facing = move > 0 ? 1 : -1;
 
+        var platforms = FindObjectsByType<ArenaPlatform>(FindObjectsSortMode.None);
         bool grounded = false;
-        foreach (var platform in FindObjectsByType<ArenaPlatform>(FindObjectsSortMode.None))
+        foreach (var platform in platforms)
         {
             var b = platform.Bounds;
             if (transform.position.x >= b.min.x - 0.3f && transform.position.x <= b.max.x + 0.3f &&
@@ -95,7 +96,7 @@ public class ArenaPlayer : NetworkBehaviour
         var position = oldPosition + new Vector3(move * speed + PushX, VerticalSpeed, 0f) * dt;
         PushX = Mathf.MoveTowards(PushX, 0f, 18f * dt);
         if (VerticalSpeed <= 0f)
-            foreach (var platform in FindObjectsByType<ArenaPlatform>(FindObjectsSortMode.None))
+            foreach (var platform in platforms)
             {
                 var b = platform.Bounds;
                 if (position.x < b.min.x - 0.3f || position.x > b.max.x + 0.3f) continue;
@@ -110,8 +111,14 @@ public class ArenaPlayer : NetworkBehaviour
 
     public override void Render()
     {
-        var peer = Runner.GetComponent<ArenaLauncher>();
-        bool visible = !Eliminated && (peer == null || !peer.HideNetworkVisuals);
+        if (Team != 0 && Team != appliedTeam)
+        {
+            foreach (var visual in visuals)
+                if (visual != bulletRenderer && visual.transform != marker)
+                    visual.sharedMaterial = Team == 1 ? redMaterial : blueMaterial;
+            appliedTeam = Team;
+        }
+        bool visible = !Eliminated;
         foreach (var visual in visuals) visual.enabled = visible;
         if (marker != null) marker.localPosition = new Vector3(Facing * Mathf.Abs(marker.localPosition.x), marker.localPosition.y, marker.localPosition.z);
         if (bullet != null) bullet.position = BulletPosition;
